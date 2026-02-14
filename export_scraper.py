@@ -334,6 +334,7 @@ def cmd_enrich(args: argparse.Namespace) -> None:
     """Enrich parsed followers with detailed API profile data."""
     DATA_DIR.mkdir(exist_ok=True)
     target = args.target
+    fast = getattr(args, "fast", False)
 
     followers_file = DATA_DIR / f"{target}_followers_export.json"
     profiles_file = DATA_DIR / f"{target}_profiles_export.csv"
@@ -451,10 +452,11 @@ def cmd_enrich(args: argparse.Namespace) -> None:
                     )
 
                 # Pacing
-                time.sleep(4)
-                if processed % 40 == 0:
-                    print("  Batch pause (45s)...")
-                    time.sleep(45)
+                time.sleep(1.5 if fast else 4)
+                if processed % (50 if fast else 40) == 0:
+                    pause = 15 if fast else 45
+                    print(f"  Batch pause ({pause}s)...")
+                    time.sleep(pause)
 
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 429:
@@ -547,12 +549,12 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         print(local[cols].head(20).to_string(index=False))
     print()
 
-    # 4. Large followings (10k+)
-    large = df[df["follower_count"] >= 10000].sort_values(
+    # 4. Large followings (25k+)
+    large = df[df["follower_count"] >= 25000].sort_values(
         "follower_count", ascending=False
     )
     large.to_csv(output_dir / "large_followings.csv", index=False)
-    print(f"Large followings (10k+): {len(large)}")
+    print(f"Large followings (25k+): {len(large)}")
     if len(large) > 0:
         cols = ["handle", "ig_user_id", "full_name", "follower_count",
                 "is_verified"]
@@ -658,6 +660,8 @@ def main() -> None:
         help="Path to export (only needed if 'parse' hasn't been run yet)",
     )
     enrich_sp.add_argument("--target", required=True, help="Target IG username")
+    enrich_sp.add_argument("--fast", action="store_true",
+                           help="Faster pacing (1.5s/req, 15s batch pause). Higher rate-limit risk.")
 
     # analyze
     analyze_sp = subparsers.add_parser(
@@ -674,6 +678,8 @@ def main() -> None:
         help="Path to extracted export directory or ZIP file",
     )
     run_sp.add_argument("--target", required=True, help="Target IG username")
+    run_sp.add_argument("--fast", action="store_true",
+                        help="Faster pacing (1.5s/req, 15s batch pause). Higher rate-limit risk.")
 
     args = parser.parse_args()
 

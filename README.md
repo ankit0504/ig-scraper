@@ -93,6 +93,9 @@ python export_scraper.py run --export-path ~/Downloads/instagram-export --target
 # Or run steps individually:
 python export_scraper.py enrich --target ACCOUNT_NAME
 python export_scraper.py analyze --target ACCOUNT_NAME
+
+# Use --fast for ~3x faster enrichment (higher rate-limit risk)
+python export_scraper.py run --export-path ~/Downloads/instagram-export --target ACCOUNT_NAME --fast
 ```
 
 **Unique features**:
@@ -120,6 +123,9 @@ python ig_api_scraper.py run --target ACCOUNT_NAME
 python ig_api_scraper.py followers --target ACCOUNT_NAME
 python ig_api_scraper.py enrich --target ACCOUNT_NAME
 python ig_api_scraper.py analyze --target ACCOUNT_NAME
+
+# Use --fast for ~3x faster scraping (higher rate-limit risk)
+python ig_api_scraper.py run --target ACCOUNT_NAME --fast
 ```
 
 ---
@@ -151,6 +157,9 @@ python scrape_followers.py enrich --username YOUR_IG_USERNAME --target ACCOUNT_N
 
 # Analyze
 python scrape_followers.py analyze --target ACCOUNT_NAME
+
+# Use --fast for ~3x faster scraping (higher rate-limit risk)
+python scrape_followers.py followers --username YOUR_IG_USERNAME --target ACCOUNT_NAME --fast
 ```
 
 ---
@@ -197,7 +206,7 @@ All scripts generate reports in `data/ACCOUNT_NAME_reports/`:
 | `all_followers.csv` | Complete follower list with all profile data |
 | `noteworthy_accounts.csv` | Verified accounts or those with 5,000+ followers |
 | `local_collaborators.csv` | Followers with Queens/NYC keywords in their bio |
-| `large_followings.csv` | Followers with 10,000+ followers |
+| `large_followings.csv` | Followers with 25,000+ followers |
 | `business_accounts.csv` | Business and professional accounts |
 | `follower_growth.csv` | Monthly follower growth timeline (export_scraper only) |
 | `mutual_follows.csv` | Followers you also follow back (export_scraper only) |
@@ -213,4 +222,24 @@ All scripts save progress incrementally and can resume where they left off:
 - **If interrupted** (Ctrl+C): Progress is saved. Just re-run.
 - **Session expired** (401 error): Refresh instagram.com in your browser, grab new cookie values, re-export the environment variables, and re-run.
 
-The enrichment step is the bottleneck — each profile lookup requires its own API call with a delay between requests to stay under rate limits. For an account with 1,000 followers, expect the enrichment to run for roughly an hour.
+The enrichment step is the bottleneck — each profile lookup requires its own API call with a delay between requests to stay under rate limits.
+
+### The `--fast` flag
+
+All scripts (except `apify_scrape.py`) support a `--fast` flag that reduces delays between requests for ~3x faster execution:
+
+|  | Default | `--fast` |
+|---|---|---|
+| Per-request delay | 4s | 1.5s |
+| Batch pause | 45s every 40 profiles | 15s every 50 profiles |
+| Follower pagination delay | 2s + 15s every 10 pages | 1s + 5s every 10 pages |
+
+The tradeoff is a higher chance of hitting rate limits. Since progress is always saved, this is low-risk — if you get rate limited, just wait a few minutes and re-run.
+
+**Estimated enrichment times** (approximate, assuming no rate limits):
+
+| Followers | Default | `--fast` |
+|-----------|---------|----------|
+| 1,000 | ~1.5 hours | ~30 min |
+| 10,000 | ~14 hours | ~5 hours |
+| 40,000 | ~56 hours | ~19 hours |

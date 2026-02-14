@@ -143,6 +143,7 @@ def cmd_followers(args: argparse.Namespace) -> list[dict]:
     DATA_DIR.mkdir(exist_ok=True)
     session = get_session()
     target = args.target
+    fast = getattr(args, "fast", False)
     followers_file = DATA_DIR / f"{target}_followers_api.json"
 
     # Resolve target user ID
@@ -205,10 +206,11 @@ def cmd_followers(args: argparse.Namespace) -> list[dict]:
         max_id = str(next_id)
 
         # Pacing
-        time.sleep(2)
+        time.sleep(1 if fast else 2)
         if page % 10 == 0:
-            print("  Pausing 15s to stay under rate limits...")
-            time.sleep(15)
+            pause = 5 if fast else 15
+            print(f"  Pausing {pause}s to stay under rate limits...")
+            time.sleep(pause)
 
     result = list(collected.values())
     with open(followers_file, "w") as f:
@@ -222,6 +224,7 @@ def cmd_enrich(args: argparse.Namespace) -> None:
     DATA_DIR.mkdir(exist_ok=True)
     session = get_session()
     target = args.target
+    fast = getattr(args, "fast", False)
 
     followers_file = DATA_DIR / f"{target}_followers_api.json"
     profiles_file = DATA_DIR / f"{target}_profiles_api.csv"
@@ -334,10 +337,11 @@ def cmd_enrich(args: argparse.Namespace) -> None:
                     )
 
                 # Pacing — web_profile_info is rate-limited aggressively
-                time.sleep(4)
-                if processed % 40 == 0:
-                    print("  Batch pause (45s)...")
-                    time.sleep(45)
+                time.sleep(1.5 if fast else 4)
+                if processed % (50 if fast else 40) == 0:
+                    pause = 15 if fast else 45
+                    print(f"  Batch pause ({pause}s)...")
+                    time.sleep(pause)
 
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 429:
@@ -419,12 +423,12 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         print(local[cols].head(20).to_string(index=False))
     print()
 
-    # 4. Large followings (10k+)
-    large = df[df["follower_count"] >= 10000].sort_values(
+    # 4. Large followings (25k+)
+    large = df[df["follower_count"] >= 25000].sort_values(
         "follower_count", ascending=False
     )
     large.to_csv(output_dir / "large_followings.csv", index=False)
-    print(f"Large followings (10k+): {len(large)}")
+    print(f"Large followings (25k+): {len(large)}")
     if len(large) > 0:
         cols = ["handle", "ig_user_id", "full_name", "follower_count",
                 "is_verified"]
@@ -482,6 +486,11 @@ def main() -> None:
         sp.add_argument(
             "--target", required=True, help="Target IG username (no @)"
         )
+        if cmd_name in ("followers", "enrich", "run"):
+            sp.add_argument(
+                "--fast", action="store_true",
+                help="Faster pacing (higher rate-limit risk, but ~3x speed)",
+            )
 
     args = parser.parse_args()
 

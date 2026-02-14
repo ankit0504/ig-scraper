@@ -382,13 +382,13 @@ def cmd_analyze(args: argparse.Namespace) -> None:
             )
         print()
 
-    # 4. Large followings (10k+)
+    # 4. Large followings (25k+)
     if len(df) > 0:
-        large = df[df["follower_count"] >= 10000].sort_values(
+        large = df[df["follower_count"] >= 25000].sort_values(
             "follower_count", ascending=False
         )
         large.to_csv(output_dir / "large_followings.csv", index=False)
-        print(f"Large followings (10k+): {len(large)}")
+        print(f"Large followings (25k+): {len(large)}")
         if len(large) > 0:
             print(
                 large[["handle", "full_name", "follower_count", "is_verified"]]

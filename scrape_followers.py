@@ -83,6 +83,7 @@ def cmd_followers(args: argparse.Namespace) -> None:
     DATA_DIR.mkdir(exist_ok=True)
     loader = get_loader(args.username)
     target = args.target
+    fast = getattr(args, "fast", False)
 
     followers_file = DATA_DIR / f"{target}_followers.json"
 
@@ -130,10 +131,11 @@ def cmd_followers(args: argparse.Namespace) -> None:
 
                 # Delay every few followers to stay under radar
                 if count % 50 == 0:
-                    time.sleep(3)
+                    time.sleep(1 if fast else 3)
                 if count % 500 == 0:
-                    print(f"  Longer pause at {count} to avoid rate limit...")
-                    time.sleep(15)
+                    pause = 5 if fast else 15
+                    print(f"  Longer pause at {count} ({pause}s)...")
+                    time.sleep(pause)
 
             # If we get here, we completed successfully
             break
@@ -162,6 +164,7 @@ def cmd_enrich(args: argparse.Namespace) -> None:
     DATA_DIR.mkdir(exist_ok=True)
     loader = get_loader(args.username)
     target = args.target
+    fast = getattr(args, "fast", False)
 
     followers_file = DATA_DIR / f"{target}_followers.json"
     profiles_file = DATA_DIR / f"{target}_profiles.csv"
@@ -215,9 +218,9 @@ def cmd_enrich(args: argparse.Namespace) -> None:
         for row in existing_rows:
             writer.writerow(row)
 
-    batch_size = 50
-    delay_between_profiles = 3  # seconds — conservative to avoid blocks
-    delay_between_batches = 30  # seconds
+    batch_size = 75 if fast else 50
+    delay_between_profiles = 1 if fast else 3
+    delay_between_batches = 10 if fast else 30
 
     processed = 0
     errors = 0
@@ -357,13 +360,13 @@ def cmd_analyze(args: argparse.Namespace) -> None:
     print()
 
     # --- 3. Large followings ---
-    large = df[df["follower_count"] >= 10000].sort_values(
+    large = df[df["follower_count"] >= 25000].sort_values(
         "follower_count", ascending=False
     )
 
     large_file = output_dir / "large_followings.csv"
     large.to_csv(large_file, index=False)
-    print(f"Accounts with 10k+ followers: {len(large)}")
+    print(f"Accounts with 25k+ followers: {len(large)}")
     if len(large) > 0:
         print(large[["handle", "full_name", "follower_count", "is_verified"]].head(20).to_string(index=False))
     print()
@@ -409,6 +412,10 @@ def main() -> None:
     followers_parser.add_argument(
         "--target", required=True, help="Target account to scrape"
     )
+    followers_parser.add_argument(
+        "--fast", action="store_true",
+        help="Faster pacing (higher rate-limit risk, but ~3x speed)",
+    )
 
     # enrich
     enrich_parser = subparsers.add_parser(
@@ -417,6 +424,10 @@ def main() -> None:
     enrich_parser.add_argument("--username", required=True, help="Your IG username")
     enrich_parser.add_argument(
         "--target", required=True, help="Target account"
+    )
+    enrich_parser.add_argument(
+        "--fast", action="store_true",
+        help="Faster pacing (higher rate-limit risk, but ~3x speed)",
     )
 
     # analyze
