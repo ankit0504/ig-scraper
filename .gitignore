@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+.claude/
+
+# Scraped data and reports (contain follower PII)
+data/
+session-*
+
+# Credentials
+.env
+.env.*
+
+# Instagram data exports (contain personal data)
+instagram-export-*/
+*.zip
