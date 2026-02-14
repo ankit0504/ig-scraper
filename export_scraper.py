@@ -303,9 +303,19 @@ def cmd_parse(args: argparse.Namespace) -> list[dict]:
     DATA_DIR.mkdir(exist_ok=True)
     target = args.target
     export_path = Path(args.export_path).expanduser().resolve()
+    since = getattr(args, "since", None)
 
     print(f"Parsing Instagram export at {export_path}...")
     followers, following = parse_export(export_path)
+
+    # Filter by --since date
+    if since:
+        before = len(followers)
+        followers = [
+            f for f in followers
+            if f["follow_date"] and f["follow_date"] >= since
+        ]
+        print(f"  Filtered to follows since {since}: {before} → {len(followers)}")
 
     # Save followers
     followers_file = DATA_DIR / f"{target}_followers_export.json"
@@ -650,6 +660,8 @@ def main() -> None:
         help="Path to extracted export directory or ZIP file",
     )
     parse_sp.add_argument("--target", required=True, help="Target IG username")
+    parse_sp.add_argument("--since",
+                          help="Only include follows on or after this date (YYYY-MM-DD)")
 
     # enrich
     enrich_sp = subparsers.add_parser(
@@ -678,6 +690,8 @@ def main() -> None:
         help="Path to extracted export directory or ZIP file",
     )
     run_sp.add_argument("--target", required=True, help="Target IG username")
+    run_sp.add_argument("--since",
+                        help="Only include follows on or after this date (YYYY-MM-DD)")
     run_sp.add_argument("--fast", action="store_true",
                         help="Faster pacing (1.5s/req, 15s batch pause). Higher rate-limit risk.")
 

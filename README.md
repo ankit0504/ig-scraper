@@ -96,7 +96,15 @@ python export_scraper.py analyze --target ACCOUNT_NAME
 
 # Use --fast for ~3x faster enrichment (higher rate-limit risk)
 python export_scraper.py run --export-path ~/Downloads/instagram-export --target ACCOUNT_NAME --fast
+
+# Use --since to only include followers from a specific date onward
+python export_scraper.py run --export-path ~/Downloads/instagram-export --target ACCOUNT_NAME --since 2026-02-14
+
+# Combine both flags
+python export_scraper.py run --export-path ~/Downloads/instagram-export --target ACCOUNT_NAME --since 2026-02-14 --fast
 ```
+
+The `--since` flag (YYYY-MM-DD format) filters out followers from before the given date at parse time, so only new followers get enriched and analyzed. This is useful when re-running the script on a fresh export — pass the date of your last run to only process new followers.
 
 **Unique features**:
 - Follower growth timeline (by month) from follow-date timestamps
