@@ -462,9 +462,9 @@ def cmd_enrich(args: argparse.Namespace) -> None:
                     )
 
                 # Pacing
-                time.sleep(1.5 if fast else 4)
-                if processed % (50 if fast else 40) == 0:
-                    pause = 15 if fast else 45
+                time.sleep(2.5 if fast else 4)
+                if processed % (40 if fast else 40) == 0:
+                    pause = 25 if fast else 45
                     print(f"  Batch pause ({pause}s)...")
                     time.sleep(pause)
 

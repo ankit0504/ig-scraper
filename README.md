@@ -234,12 +234,12 @@ The enrichment step is the bottleneck — each profile lookup requires its own A
 
 ### The `--fast` flag
 
-All scripts (except `apify_scrape.py`) support a `--fast` flag that reduces delays between requests for ~3x faster execution:
+All scripts (except `apify_scrape.py`) support a `--fast` flag that reduces delays between requests for ~1.7x faster execution:
 
 |  | Default | `--fast` |
 |---|---|---|
-| Per-request delay | 4s | 1.5s |
-| Batch pause | 45s every 40 profiles | 15s every 50 profiles |
+| Per-request delay | 4s | 2.5s |
+| Batch pause | 45s every 40 profiles | 25s every 40 profiles |
 | Follower pagination delay | 2s + 15s every 10 pages | 1s + 5s every 10 pages |
 
 The tradeoff is a higher chance of hitting rate limits. Since progress is always saved, this is low-risk — if you get rate limited, just wait a few minutes and re-run.
@@ -248,6 +248,6 @@ The tradeoff is a higher chance of hitting rate limits. Since progress is always
 
 | Followers | Default | `--fast` |
 |-----------|---------|----------|
-| 1,000 | ~1.5 hours | ~30 min |
-| 10,000 | ~14 hours | ~5 hours |
-| 40,000 | ~56 hours | ~19 hours |
+| 1,000 | ~1.5 hours | ~50 min |
+| 10,000 | ~14 hours | ~8 hours |
+| 40,000 | ~56 hours | ~33 hours |
