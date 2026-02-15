@@ -113,8 +113,9 @@ def api_get(session: requests.Session, url: str, params: dict | None = None,
             resp.raise_for_status()
             return resp.json()
 
-        except requests.exceptions.RequestException as e:
+        except (requests.exceptions.RequestException, ValueError) as e:
             if attempt == max_retries - 1:
+                print(f"    Final attempt failed. Response text: {resp.text[:200] if resp is not None else 'N/A'}")
                 raise
             wait = 30 * (2 ** attempt)
             print(f"    Request error: {e}. Retrying in {wait}s...")
@@ -146,14 +147,21 @@ def cmd_followers(args: argparse.Namespace) -> list[dict]:
     fast = getattr(args, "fast", False)
     followers_file = DATA_DIR / f"{target}_followers_api.json"
 
-    # Resolve target user ID
-    print(f"Resolving @{target}...")
-    target_id, target_profile = resolve_user_id(session, target)
-    follower_count = (
-        target_profile.get("edge_followed_by", {}).get("count")
-        or target_profile.get("follower_count", "?")
-    )
-    print(f"  @{target}  IGUID: {target_id}  Followers: {follower_count}")
+    # Resolve target user ID (use cached ID if available to avoid
+    # hitting the rate-limited web_profile_info endpoint on restart)
+    id_cache_file = DATA_DIR / f"{target}_user_id.txt"
+    if id_cache_file.exists():
+        target_id = id_cache_file.read_text().strip()
+        print(f"  @{target}  IGUID: {target_id} (cached)")
+    else:
+        print(f"Resolving @{target}...")
+        target_id, target_profile = resolve_user_id(session, target)
+        follower_count = (
+            target_profile.get("edge_followed_by", {}).get("count")
+            or target_profile.get("follower_count", "?")
+        )
+        print(f"  @{target}  IGUID: {target_id}  Followers: {follower_count}")
+        id_cache_file.write_text(target_id)
 
     # Load existing progress
     collected: dict[str, dict] = {}
@@ -165,8 +173,12 @@ def cmd_followers(args: argparse.Namespace) -> list[dict]:
 
     # Paginate the followers endpoint
     print("Fetching followers...")
+    cursor_file = DATA_DIR / f"{target}_followers_api_cursor.txt"
     max_id = ""
     page = 0
+    if cursor_file.exists():
+        max_id = cursor_file.read_text().strip()
+        print(f"  Resuming pagination from cursor: {max_id[:20]}...")
 
     while True:
         page += 1
@@ -202,8 +214,10 @@ def cmd_followers(args: argparse.Namespace) -> list[dict]:
 
         next_id = data.get("next_max_id")
         if not next_id:
+            cursor_file.unlink(missing_ok=True)
             break
         max_id = str(next_id)
+        cursor_file.write_text(max_id)
 
         # Pacing
         time.sleep(1 if fast else 2)

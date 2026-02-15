@@ -281,6 +281,16 @@ def api_get(session: requests.Session, url: str, params: dict | None = None,
             if resp.status_code == 404:
                 return {}
 
+            # Server errors — skip after 2 quick retries
+            if resp.status_code >= 500:
+                if attempt >= 1:
+                    print(f"    Skipping (server error {resp.status_code} after {attempt + 1} attempts)")
+                    return {}
+                wait = 10
+                print(f"    Server error ({resp.status_code}). Retrying in {wait}s...")
+                time.sleep(wait)
+                continue
+
             resp.raise_for_status()
             return resp.json()
 
@@ -345,6 +355,7 @@ def cmd_enrich(args: argparse.Namespace) -> None:
     DATA_DIR.mkdir(exist_ok=True)
     target = args.target
     fast = getattr(args, "fast", False)
+    uid_only = getattr(args, "uid_only", False)
 
     followers_file = DATA_DIR / f"{target}_followers_export.json"
     profiles_file = DATA_DIR / f"{target}_profiles_export.csv"
@@ -359,6 +370,15 @@ def cmd_enrich(args: argparse.Namespace) -> None:
     with open(followers_file) as f:
         followers = json.load(f)
 
+    # Load user IDs from API followers file if available
+    api_followers_file = DATA_DIR / f"{target}_followers_api.json"
+    username_to_uid: dict[str, str] = {}
+    if api_followers_file.exists():
+        with open(api_followers_file) as f:
+            for item in json.load(f):
+                username_to_uid[item["handle"]] = str(item["ig_user_id"])
+        print(f"Loaded {len(username_to_uid)} user IDs from API followers file")
+
     session = get_session()
 
     # Resume support
@@ -372,8 +392,19 @@ def cmd_enrich(args: argparse.Namespace) -> None:
                 existing_rows.append(row)
         print(f"Resuming: {len(enriched_ids)} already enriched")
 
-    remaining = [f for f in followers if f["handle"] not in enriched_ids]
-    print(f"{len(remaining)} to enrich out of {len(followers)} total")
+    failed_file = DATA_DIR / f"{target}_failed_enrichments.txt"
+    failed_ids: set[str] = set()
+    if failed_file.exists():
+        with open(failed_file) as f:
+            failed_ids = {line.strip() for line in f if line.strip()}
+        print(f"Skipping {len(failed_ids)} previously failed")
+
+    remaining = [f for f in followers if f["handle"] not in enriched_ids and f["handle"] not in failed_ids]
+    if uid_only:
+        remaining = [f for f in remaining if f["handle"] in username_to_uid]
+        print(f"{len(remaining)} to enrich (UID-only mode) out of {len(followers)} total")
+    else:
+        print(f"{len(remaining)} to enrich out of {len(followers)} total")
 
     if not remaining:
         print("All profiles already enriched!")
@@ -405,27 +436,39 @@ def cmd_enrich(args: argparse.Namespace) -> None:
             follow_date = follower.get("follow_date", "")
 
             try:
-                url = "https://www.instagram.com/api/v1/users/web_profile_info/"
-                data = api_get(session, url, params={"username": username})
-                user = data.get("data", {}).get("user")
+                uid = username_to_uid.get(username)
+                if uid:
+                    # ID-based endpoint — less rate-limited
+                    url = f"https://www.instagram.com/api/v1/users/{uid}/info/"
+                    data = api_get(session, url)
+                    user = data.get("user")
+                else:
+                    # Fallback to username-based endpoint
+                    url = "https://www.instagram.com/api/v1/users/web_profile_info/"
+                    data = api_get(session, url, params={"username": username})
+                    user = data.get("data", {}).get("user")
 
                 if not user:
                     errors += 1
+                    with open(failed_file, "a") as ff:
+                        ff.write(f"{username}\n")
                     continue
 
                 row = {
                     "handle": user.get("username", username),
-                    "ig_user_id": user.get("id", ""),
+                    "ig_user_id": user.get("id") or user.get("pk", ""),
                     "full_name": user.get("full_name", ""),
                     "follower_count": (
-                        user.get("edge_followed_by", {}).get("count", 0)
+                        user.get("follower_count")
+                        or user.get("edge_followed_by", {}).get("count", 0)
                     ),
                     "following_count": (
-                        user.get("edge_follow", {}).get("count", 0)
+                        user.get("following_count")
+                        or user.get("edge_follow", {}).get("count", 0)
                     ),
                     "is_verified": user.get("is_verified", False),
                     "is_private": user.get("is_private", False),
-                    "is_business": user.get("is_business_account", False),
+                    "is_business": user.get("is_business_account") or user.get("is_business", False),
                     "is_professional": user.get(
                         "is_professional_account", False
                     ),
@@ -440,11 +483,13 @@ def cmd_enrich(args: argparse.Namespace) -> None:
                     ),
                     "external_url": user.get("external_url", "") or "",
                     "post_count": (
-                        user.get("edge_owner_to_timeline_media", {})
+                        user.get("media_count")
+                        or user.get("edge_owner_to_timeline_media", {})
                         .get("count", 0)
                     ),
                     "profile_pic_url": (
                         user.get("profile_pic_url_hd", "")
+                        or user.get("hd_profile_pic_url_info", {}).get("url", "")
                         or user.get("profile_pic_url", "")
                     ),
                     "follow_date": follow_date,
@@ -461,12 +506,19 @@ def cmd_enrich(args: argparse.Namespace) -> None:
                         f"({errors} errors)"
                     )
 
-                # Pacing
-                time.sleep(2.5 if fast else 4)
-                if processed % (40 if fast else 40) == 0:
-                    pause = 25 if fast else 45
-                    print(f"  Batch pause ({pause}s)...")
-                    time.sleep(pause)
+                # Pacing — ID endpoint is less rate-limited
+                if uid:
+                    time.sleep(1 if fast else 1.5)
+                    if processed % (100 if fast else 80) == 0:
+                        pause = 10 if fast else 15
+                        print(f"  Batch pause ({pause}s)...")
+                        time.sleep(pause)
+                else:
+                    time.sleep(2.5 if fast else 4)
+                    if processed % (40 if fast else 40) == 0:
+                        pause = 25 if fast else 45
+                        print(f"  Batch pause ({pause}s)...")
+                        time.sleep(pause)
 
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 429:
@@ -675,6 +727,8 @@ def main() -> None:
     enrich_sp.add_argument("--target", required=True, help="Target IG username")
     enrich_sp.add_argument("--fast", action="store_true",
                            help="Faster pacing (1.5s/req, 15s batch pause). Higher rate-limit risk.")
+    enrich_sp.add_argument("--uid-only", action="store_true",
+                           help="Only enrich followers that have a user ID from the API followers file.")
 
     # analyze
     analyze_sp = subparsers.add_parser(
@@ -695,6 +749,8 @@ def main() -> None:
                         help="Only include follows on or after this date (YYYY-MM-DD)")
     run_sp.add_argument("--fast", action="store_true",
                         help="Faster pacing (1.5s/req, 15s batch pause). Higher rate-limit risk.")
+    run_sp.add_argument("--uid-only", action="store_true",
+                        help="Only enrich followers that have a user ID from the API followers file.")
 
     args = parser.parse_args()
 
