@@ -81,28 +81,52 @@ This is the recommended approach. It parses the official Instagram data export t
 
 **Step 2**: Set session cookies (see [Getting Instagram Session Cookies](#getting-instagram-session-cookies))
 
-**Step 3**: Run it:
+**Step 3** *(recommended)*: Pre-fetch user IDs with `ig_api_scraper.py`:
+
+The enrichment step looks up each follower's full profile via the API. By default it uses the `web_profile_info` endpoint (username-based), which is aggressively rate-limited (~20-30 requests before throttling). A much faster alternative is the `/users/{id}/info/` endpoint, which requires numeric user IDs.
+
+To get user IDs, run the follower fetch from `ig_api_scraper.py` first. This works best with the **target account's own cookies** (the followers endpoint returns all followers only for the account owner):
 
 ```bash
-# Parse only (no API calls needed)
-python export_scraper.py parse --export-path ~/Downloads/instagram-export --target ACCOUNT_NAME
+# Set the TARGET ACCOUNT's cookies (not your personal account)
+export IG_SESSION_ID=<target account sessionid>
+export IG_CSRF_TOKEN=<target account csrftoken>
+export IG_DS_USER_ID=<target account ds_user_id>
+
+python ig_api_scraper.py followers --target ACCOUNT_NAME
+```
+
+This saves `data/ACCOUNT_NAME_followers_api.json` with user IDs. It paginates 100 followers per page and takes ~20 minutes for 40k followers. The enrichment step automatically loads this file and uses the ID-based endpoint for any follower it finds there.
+
+If you don't have the target account's cookies, you can still run this with your own cookies — but Instagram caps non-owner sessions at ~8,500 followers. Those will still use the faster endpoint, with the rest falling back to the username-based lookup.
+
+**Step 4**: Run the enrichment:
+
+```bash
+# Switch back to your own cookies for enrichment
+export IG_SESSION_ID=<your sessionid>
+export IG_CSRF_TOKEN=<your csrftoken>
+export IG_DS_USER_ID=<your ds_user_id>
 
 # Parse + enrich + analyze (all steps)
 python export_scraper.py run --export-path ~/Downloads/instagram-export --target ACCOUNT_NAME
 
 # Or run steps individually:
+python export_scraper.py parse --export-path ~/Downloads/instagram-export --target ACCOUNT_NAME
 python export_scraper.py enrich --target ACCOUNT_NAME
 python export_scraper.py analyze --target ACCOUNT_NAME
 
-# Use --fast for ~3x faster enrichment (higher rate-limit risk)
+# Use --fast for faster enrichment (higher rate-limit risk)
 python export_scraper.py run --export-path ~/Downloads/instagram-export --target ACCOUNT_NAME --fast
+
+# Use --uid-only to ONLY enrich followers with known user IDs (skips username endpoint entirely)
+python export_scraper.py enrich --target ACCOUNT_NAME --fast --uid-only
 
 # Use --since to only include followers from a specific date onward
 python export_scraper.py run --export-path ~/Downloads/instagram-export --target ACCOUNT_NAME --since 2026-02-14
-
-# Combine both flags
-python export_scraper.py run --export-path ~/Downloads/instagram-export --target ACCOUNT_NAME --since 2026-02-14 --fast
 ```
+
+The `--uid-only` flag skips any follower without a user ID from the API file, avoiding the rate-limited username endpoint entirely.
 
 The `--since` flag (YYYY-MM-DD format) filters out followers from before the given date at parse time, so only new followers get enriched and analyzed. This is useful when re-running the script on a fresh export — pass the date of your last run to only process new followers.
 
@@ -230,24 +254,45 @@ All scripts save progress incrementally and can resume where they left off:
 - **If interrupted** (Ctrl+C): Progress is saved. Just re-run.
 - **Session expired** (401 error): Refresh instagram.com in your browser, grab new cookie values, re-export the environment variables, and re-run.
 
-The enrichment step is the bottleneck — each profile lookup requires its own API call with a delay between requests to stay under rate limits.
+The enrichment step is the bottleneck — each profile lookup requires its own API call with a delay between requests to stay under rate limits. Failed enrichments are logged to `data/ACCOUNT_NAME_failed_enrichments.txt` and skipped on subsequent runs.
+
+### Enrichment endpoints
+
+The enrichment step uses one of two Instagram API endpoints:
+
+| Endpoint | Lookup by | Rate limit | Used when |
+|---|---|---|---|
+| `/users/{id}/info/` | User ID | Lenient | User ID available in `_followers_api.json` |
+| `/users/web_profile_info/` | Username | Aggressive (~20-30 requests) | Fallback when no user ID |
+
+Pre-fetching user IDs with `ig_api_scraper.py followers` (see Step 3 above) is strongly recommended to use the faster endpoint.
 
 ### The `--fast` flag
 
-All scripts (except `apify_scrape.py`) support a `--fast` flag that reduces delays between requests for ~1.7x faster execution:
+All scripts (except `apify_scrape.py`) support a `--fast` flag that reduces delays between requests:
+
+**Username endpoint (web_profile_info):**
 
 |  | Default | `--fast` |
 |---|---|---|
 | Per-request delay | 4s | 2.5s |
 | Batch pause | 45s every 40 profiles | 25s every 40 profiles |
-| Follower pagination delay | 2s + 15s every 10 pages | 1s + 5s every 10 pages |
+
+**ID endpoint (users/{id}/info/):**
+
+|  | Default | `--fast` |
+|---|---|---|
+| Per-request delay | 1.5s | 1s |
+| Batch pause | 15s every 80 profiles | 10s every 100 profiles |
+
+**Follower pagination delay** (ig_api_scraper): 2s + 15s every 10 pages (1s + 5s with `--fast`)
 
 The tradeoff is a higher chance of hitting rate limits. Since progress is always saved, this is low-risk — if you get rate limited, just wait a few minutes and re-run.
 
 **Estimated enrichment times** (approximate, assuming no rate limits):
 
-| Followers | Default | `--fast` |
-|-----------|---------|----------|
-| 1,000 | ~1.5 hours | ~50 min |
-| 10,000 | ~14 hours | ~8 hours |
-| 40,000 | ~56 hours | ~33 hours |
+| Followers | Username endpoint | Username `--fast` | ID endpoint | ID `--fast` |
+|-----------|---|---|---|---|
+| 1,000 | ~1.5 hours | ~50 min | ~25 min | ~18 min |
+| 10,000 | ~14 hours | ~8 hours | ~4 hours | ~3 hours |
+| 40,000 | ~56 hours | ~33 hours | ~17 hours | ~12 hours |
