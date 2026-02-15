@@ -262,15 +262,15 @@ def get_session() -> requests.Session:
 
 
 def api_get(session: requests.Session, url: str, params: dict | None = None,
-            max_retries: int = 3) -> dict:
+            max_retries: int = 8) -> dict:
     """GET with retry + rate-limit handling."""
     for attempt in range(max_retries):
         try:
             resp = session.get(url, params=params, timeout=30)
 
             if resp.status_code == 429:
-                wait = 60 * (2 ** attempt)
-                print(f"    Rate limited (429). Waiting {wait}s...")
+                wait = min(60 * (2 ** attempt), 900)  # cap at 15 min
+                print(f"    Rate limited (429). Waiting {wait}s (attempt {attempt + 1}/{max_retries})...")
                 time.sleep(wait)
                 continue
 
@@ -287,7 +287,7 @@ def api_get(session: requests.Session, url: str, params: dict | None = None,
         except requests.exceptions.RequestException as e:
             if attempt == max_retries - 1:
                 raise
-            wait = 30 * (2 ** attempt)
+            wait = min(30 * (2 ** attempt), 900)
             print(f"    Request error: {e}. Retrying in {wait}s...")
             time.sleep(wait)
 
@@ -471,10 +471,11 @@ def cmd_enrich(args: argparse.Namespace) -> None:
             except requests.exceptions.HTTPError as e:
                 if e.response is not None and e.response.status_code == 429:
                     print(
-                        f"\nRate limited at {processed}/{len(remaining)}. "
-                        "Wait ~15 min and re-run to resume."
+                        f"\n    Rate limited at {processed}/{len(remaining)}. "
+                        "Backing off 15 min then continuing..."
                     )
-                    break
+                    time.sleep(900)
+                    continue
                 errors += 1
                 time.sleep(5)
             except Exception:
