@@ -278,7 +278,7 @@ def api_get(session: requests.Session, url: str, params: dict | None = None,
                 print("    Session expired or invalid. Refresh your cookies.")
                 sys.exit(1)
 
-            if resp.status_code == 404:
+            if resp.status_code in (400, 404):
                 return {}
 
             # Server errors — skip after 2 quick retries
@@ -286,20 +286,42 @@ def api_get(session: requests.Session, url: str, params: dict | None = None,
                 if attempt >= 1:
                     print(f"    Skipping (server error {resp.status_code} after {attempt + 1} attempts)")
                     return {}
-                wait = 10
+                wait = 2
                 print(f"    Server error ({resp.status_code}). Retrying in {wait}s...")
                 time.sleep(wait)
                 continue
 
             resp.raise_for_status()
+
+            # Empty response — soft rate limit
+            if not resp.text.strip():
+                wait = min(60 * (2 ** attempt), 900)
+                print(f"    Empty response (soft rate limit). Waiting {wait}s (attempt {attempt + 1}/{max_retries})...")
+                time.sleep(wait)
+                continue
+
             return resp.json()
 
-        except requests.exceptions.RequestException as e:
-            if attempt == max_retries - 1:
-                raise
-            wait = min(30 * (2 ** attempt), 900)
-            print(f"    Request error: {e}. Retrying in {wait}s...")
+        except ValueError as e:
+            # JSON decode error — likely a soft rate limit
+            wait = min(60 * (2 ** attempt), 900)
+            print(f"    Empty/invalid response. Waiting {wait}s (attempt {attempt + 1}/{max_retries})...")
             time.sleep(wait)
+
+        except requests.exceptions.RequestException as e:
+            # Server errors — skip after 2 quick retries
+            if resp.status_code >= 500:
+                if attempt >= 1:
+                    print(f"    Skipping (server error {resp.status_code})")
+                    return {}
+                print(f"    Server error ({resp.status_code}). Retrying in 2s...")
+                time.sleep(2)
+            else:
+                if attempt == max_retries - 1:
+                    raise
+                wait = min(30 * (2 ** attempt), 900)
+                print(f"    Request error: {e}. Retrying in {wait}s...")
+                time.sleep(wait)
 
     return {}
 
@@ -508,7 +530,7 @@ def cmd_enrich(args: argparse.Namespace) -> None:
 
                 # Pacing — ID endpoint is less rate-limited
                 if uid:
-                    time.sleep(1 if fast else 1.5)
+                    time.sleep(1.5 if fast else 2)
                     if processed % (100 if fast else 80) == 0:
                         pause = 10 if fast else 15
                         print(f"  Batch pause ({pause}s)...")
@@ -555,7 +577,7 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         print("No profiles file. Run 'enrich' first.")
         sys.exit(1)
 
-    df = pd.read_csv(profiles_file)
+    df = pd.read_csv(profiles_file, dtype={"ig_user_id": str})
     print(f"Loaded {len(df)} enriched profiles\n")
 
     output_dir = DATA_DIR / f"{target}_reports"
@@ -572,8 +594,10 @@ def cmd_analyze(args: argparse.Namespace) -> None:
     else:
         df["is_mutual"] = False
 
-    # 1. All followers (full dump)
-    df.to_csv(output_dir / "all_followers.csv", index=False)
+    # 1. All followers (full dump, sorted by follower count descending)
+    df.sort_values("follower_count", ascending=False).to_csv(
+        output_dir / "all_followers.csv", index=False
+    )
 
     # 2. Noteworthy accounts (verified OR 5k+ followers)
     noteworthy = df[
