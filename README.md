@@ -1,8 +1,10 @@
-# Instagram Follower Scraper
+# Instagram Scraper
 
-Scrape Instagram follower profiles via [Apify](https://apify.com/) and generate analysis reports. Designed to work with an official Instagram data export as input.
+Scrape Instagram follower profiles and post engagement data via [Apify](https://apify.com/).
 
-Only makes Apify API calls for **new followers** — profiles already in output files from previous runs are skipped automatically.
+Two scripts:
+- **`apify_to_report.py`** — enrich follower profiles from an Instagram data export
+- **`post_engagers.py`** — scrape likers and commenters for specific posts
 
 ## Prerequisites
 
@@ -26,7 +28,9 @@ pip install -r requirements.txt
 export APIFY_TOKEN=your_token_here
 ```
 
-## Usage
+## Follower Enrichment (`apify_to_report.py`)
+
+Only makes Apify API calls for **new followers** — profiles already in output files from previous runs are skipped automatically.
 
 ### Scrape new followers
 
@@ -69,11 +73,52 @@ python apify_to_report.py analyze --target chuckforqueens
 
 Regenerates reports from the existing profiles CSV without making any API calls.
 
+## Post Engagement (`post_engagers.py`)
+
+Scrape likers and commenters for any public Instagram post.
+
+### Scrape a single post
+
+```bash
+python post_engagers.py scrape --post https://www.instagram.com/p/DWH7GlqjUR5/
+```
+
+This will:
+1. Fetch all likers via `patient_discovery/instagram-likes`
+2. Fetch all commenters via `apify/instagram-comment-scraper`
+3. Merge into a single CSV with `liked`/`commented` flags
+4. Print a summary showing who liked, commented, or both
+
+### Scrape multiple posts
+
+```bash
+python post_engagers.py scrape --posts-file posts.txt
+```
+
+Where `posts.txt` has one Instagram post URL per line.
+
+### Re-run analysis
+
+```bash
+python post_engagers.py analyze --post https://www.instagram.com/p/DWH7GlqjUR5/
+```
+
+Regenerates the CSV from existing raw data without making API calls.
+
+### Post engagement output files
+
+| File | Description |
+|------|-------------|
+| `post_<shortcode>_engagers_raw.json` | Raw Apify responses (likers + commenters) |
+| `post_<shortcode>_engagers.csv` | Merged engagers with `liked`, `commented`, `comment_text`, `comment_likes` columns |
+
+Skips re-scraping if raw data already exists for a post.
+
 ## Safety checks
 
 When no existing data files are found for a target, the script will prompt for confirmation before making any API calls. This prevents accidentally re-scraping everything if you forgot to place output files from a previous run.
 
-## Output files
+## Follower enrichment output files
 
 All output goes into `data/`:
 
@@ -87,7 +132,7 @@ All output goes into `data/`:
 | `<target>_pending_run.json` | Temporary file tracking in-progress Apify runs (auto-cleaned) |
 | `<target>_reports/` | Analysis report CSVs |
 
-### Reports generated
+### Follower reports generated
 
 - **all_followers.csv** — full list sorted by follower count
 - **noteworthy_accounts.csv** — verified or 5k+ followers
