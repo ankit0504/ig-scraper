@@ -162,6 +162,30 @@ def cmd_scrape(args: argparse.Namespace) -> None:
 
     print(f"Total: {len(all_usernames)} | Already scraped: {len(already_scraped)} | Remaining: {len(remaining)}")
 
+    # Safety check: if no existing data was found, confirm with user before spending API credits
+    if not already_scraped and remaining:
+        existing_files = [
+            f for f in [
+                raw_file,
+                DATA_DIR / f"{target}_profiles_export.csv",
+                DATA_DIR / f"{target}_failed_enrichments.txt",
+            ] if f.exists()
+        ]
+        print()
+        print("WARNING: No existing scraped data found for this target.")
+        print(f"This will send {len(remaining)} usernames to Apify (costs API credits).")
+        print()
+        print("Expected data files (none found):")
+        print(f"  - {raw_file}")
+        print(f"  - data/{target}_profiles_export.csv")
+        print(f"  - data/{target}_failed_enrichments.txt")
+        print()
+        print("If you have data from a previous run, place it in the data/ directory first.")
+        confirm = input("Proceed with scraping? [y/N] ").strip().lower()
+        if confirm != "y":
+            print("Aborted.")
+            sys.exit(0)
+
     if not remaining:
         print("All profiles already scraped!")
     else:

@@ -53,6 +53,14 @@ python apify_to_report.py convert --input data/apify-data-combined.json --target
 
 Converts a raw Apify JSON dump into the profiles CSV and generates reports. No API calls made.
 
+### Recover an interrupted run
+
+```bash
+python apify_to_report.py recover --target chuckforqueens --run-id <apify_run_id>
+```
+
+If the script was interrupted (Ctrl+C, lost connection), the Apify run may still complete on their servers. Use the run ID from the logs to fetch results without paying again. On re-run, pending runs are also detected and recovered automatically.
+
 ### Re-run analysis
 
 ```bash
@@ -60,6 +68,10 @@ python apify_to_report.py analyze --target chuckforqueens
 ```
 
 Regenerates reports from the existing profiles CSV without making any API calls.
+
+## Safety checks
+
+When no existing data files are found for a target, the script will prompt for confirmation before making any API calls. This prevents accidentally re-scraping everything if you forgot to place output files from a previous run.
 
 ## Output files
 
@@ -70,8 +82,9 @@ All output goes into `data/`:
 | `<target>_followers_export.json` | Parsed followers from IG export (input) |
 | `<target>_following_export.json` | Parsed following list from IG export (used for mutual follow detection) |
 | `<target>_apify_profiles_raw.json` | Raw Apify API responses (used for resume/dedup) |
-| `<target>_profiles_export.csv` | Enriched profiles — merged from all sources |
+| `<target>_profiles_export.csv` | Enriched profiles — merged from all sources, with `status` column |
 | `<target>_failed_enrichments.txt` | Usernames that failed enrichment (skipped on re-runs) |
+| `<target>_pending_run.json` | Temporary file tracking in-progress Apify runs (auto-cleaned) |
 | `<target>_reports/` | Analysis report CSVs |
 
 ### Reports generated
@@ -84,7 +97,12 @@ All output goes into `data/`:
 - **follower_growth.csv** — monthly follower growth timeline
 - **mutual_follows.csv** — followers you also follow back
 - **not_following_back.csv** — followers you don't follow back
+- **unfollowers.csv** — profiles from previous runs no longer in the current export
+
+## Unfollower detection
+
+Each profile in the CSV has a `status` column (`following` or `unfollowed`). When you download a new Instagram export and re-run, anyone missing from the new export is marked as `unfollowed` and appears in the unfollowers report. They remain in the CSV for historical reference but are excluded from other reports.
 
 ## Resume support
 
-The script saves progress after each batch. If interrupted, just re-run the same command — it picks up where it left off.
+The script saves progress after each batch. If interrupted, just re-run the same command — it picks up where it left off. Apify runs that were started but not fetched are automatically recovered.
