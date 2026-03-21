@@ -1,3 +1,2 @@
-instaloader>=4.10
+apify-client>=1.0
 pandas>=2.0
-requests>=2.31
