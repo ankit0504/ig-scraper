@@ -21,11 +21,11 @@ import streamlit as st
 
 st.set_page_config(page_title="IG Scraper", page_icon="📊", layout="wide")
 
-# Inject Apify token into env before importing modules that use it
-apify_token = st.sidebar.text_input(
-    "Apify Token", type="password",
-    help="Get yours at https://console.apify.com/account/integrations",
-)
+# Resolve Apify token: Streamlit Secrets (deployed) or env var (local)
+try:
+    apify_token = st.secrets["APIFY_TOKEN"]
+except (FileNotFoundError, KeyError):
+    apify_token = os.environ.get("APIFY_TOKEN", "")
 if apify_token:
     os.environ["APIFY_TOKEN"] = apify_token
 
@@ -59,7 +59,7 @@ def capture_prints(fn, *args, **kwargs):
 
 def require_token():
     if not apify_token:
-        st.error("Paste your Apify token in the sidebar first.")
+        st.error("No Apify token configured. Ask the app owner to set APIFY_TOKEN in Streamlit Secrets.")
         st.stop()
 
 
@@ -146,8 +146,6 @@ noteworthy accounts, local collaborators, business accounts, unfollower detectio
 No Apify token needed for this one.
 
 All three tools require you to upload or provide data. Results can be previewed inline and downloaded as CSV.
-You'll need an [Apify token](https://console.apify.com/account/integrations) (free tier available)
-for the scraping tools.
 """)
 
 st.markdown("---")
