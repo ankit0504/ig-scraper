@@ -136,16 +136,28 @@ st.title("IG Scraper")
 
 with st.expander("How to use this tool", expanded=False):
     st.markdown("""
-**Profile Scraper** — Provide a list of Instagram usernames, and this tool scrapes their profile details
-(follower count, bio, verified status, etc.) via Apify, then generates reports:
-noteworthy accounts, local collaborators, business accounts, unfollower detection, and more.
+### Tools
 
-**Post Engagers** — Paste an Instagram post URL to find out who liked and commented on it.
+- **Profile Scraper** — Upload a list of Instagram usernames and scrape their profile details
+  (follower count, bio, verified status, etc.). Generates reports: noteworthy accounts,
+  local collaborators, business accounts, unfollower detection, and more.
+- **Post Engagers** — Paste an Instagram post URL to find out who liked and commented on it.
+- **Analyze Existing Data** — Upload data from a previous scrape and re-run the analysis
+  reports without making any API calls.
 
-**Analyze Existing Data** — Upload data from a previous scrape and re-run the analysis reports.
-No Apify token needed for this one.
+### How it works
 
-All three tools require you to upload or provide data. Results can be previewed inline and downloaded as CSV.
+1. Pick a tool from the sidebar
+2. Enter the target IG account name and upload your files
+3. Hit the button — results appear inline and can be downloaded as CSV
+
+The Apify API token is already configured — you don't need to provide one.
+
+### Important: upload existing data first!
+
+If this account has been scraped before, **upload the previous results before scraping again**.
+This prevents re-scraping profiles we already have and saves API credits. The Profile Scraper
+page walks you through this in Step 1.
 """)
 
 st.markdown("---")
@@ -332,7 +344,7 @@ elif tool == "Post Engagers":
 # =============================================================================
 elif tool == "Analyze Existing Data":
     st.header("Analyze Existing Data")
-    st.caption("Upload data from a previous scrape and re-run analysis. No Apify token needed.")
+    st.caption("Upload data from a previous scrape and re-run analysis. No API calls made.")
 
     target = st.text_input(
         "Target account",
