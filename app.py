@@ -164,35 +164,33 @@ if tool == "Profile Scraper":
     )
 
     # --- Step 1: Upload existing data to avoid re-scraping ---
-    if target:
-        st.markdown("### Step 1: Upload existing data")
-        st.warning(
-            "**Before scraping, upload any data you already have** so we don't waste "
-            "API credits re-scraping accounts we've already processed. "
-            "If this is your first time, skip to Step 2."
-        )
-        st.markdown(
-            f"Rename your files to match these names exactly, then upload them:\n"
-            f"- **`{target}_apify_profiles_raw.json`** — raw Apify results from a previous scrape\n"
-            f"- **`{target}_profiles_export.csv`** — enriched profiles CSV\n"
-            f"- **`{target}_failed_enrichments.txt`** — usernames that previously failed\n"
-        )
-        existing_data_files = st.file_uploader(
-            "Upload previous scrape data (optional)",
-            type=["json", "csv", "txt"],
-            accept_multiple_files=True,
-            key="profile_existing_data",
-        )
-        if existing_data_files:
-            for f in existing_data_files:
-                save_upload(f)
-                f.seek(0)
-            st.success(f"Loaded {len(existing_data_files)} file(s): {', '.join(f.name for f in existing_data_files)}")
+    name = target or "youraccountname"
 
-        st.markdown("### Step 2: Upload usernames to scrape")
-    else:
-        st.markdown("**Upload usernames to scrape**")
+    st.markdown("### Step 1: Upload existing data")
+    st.warning(
+        "**Have you scraped this account before?** Upload your previous results first "
+        "so we skip already-scraped profiles and don't waste API credits. "
+        "If this is your first time, skip to Step 2."
+    )
+    st.markdown(
+        f"Rename your files to match these names, then upload them:\n"
+        f"- **`{name}_apify_profiles_raw.json`** — raw Apify results from a previous scrape\n"
+        f"- **`{name}_profiles_export.csv`** — enriched profiles CSV\n"
+        f"- **`{name}_failed_enrichments.txt`** — usernames that previously failed\n"
+    )
+    existing_data_files = st.file_uploader(
+        "Upload previous scrape data (optional)",
+        type=["json", "csv", "txt"],
+        accept_multiple_files=True,
+        key="profile_existing_data",
+    )
+    if existing_data_files:
+        for f in existing_data_files:
+            save_upload(f)
+            f.seek(0)
+        st.success(f"Loaded {len(existing_data_files)} file(s): {', '.join(f.name for f in existing_data_files)}")
 
+    st.markdown("### Step 2: Upload usernames to scrape")
     st.caption(
         "A **.txt** file with one username per line, or a **.json** followers export "
         "(list of objects with a `handle` or `username` field)."
