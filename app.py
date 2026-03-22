@@ -67,6 +67,48 @@ tool = st.sidebar.radio("Tool", ["Profile Scraper", "Post Engagers", "Analyze Ex
 
 DATA_DIR.mkdir(exist_ok=True)
 
+# --- Welcome / Getting Started ---
+st.title("IG Scraper")
+
+with st.expander("Getting Started — Read this first!", expanded=not any(DATA_DIR.iterdir())):
+    st.markdown("""
+### What this tool does
+Scrape and analyze Instagram follower profiles and post engagement data using [Apify](https://apify.com).
+
+### Quick start
+
+**Option A: Scrape new data** (requires Apify token)
+1. Get a free Apify token at [console.apify.com/account/integrations](https://console.apify.com/account/integrations)
+2. Paste it in the **Apify Token** field in the sidebar
+3. Pick **Profile Scraper** or **Post Engagers** from the sidebar
+4. Follow the prompts and download your results when done
+
+**Option B: Analyze existing data** (no token needed)
+1. Upload your data files using the **Upload Data** section at the bottom of the sidebar
+2. Pick **Analyze Existing Data** from the sidebar
+3. Select your target account and run the analysis
+
+### File naming
+Uploaded files **must** follow these naming conventions or the tool won't recognize them:
+
+| File | Name it | What it's for |
+|------|---------|---------------|
+| Followers list | `{account}_followers_export.json` | List of follower handles to scrape |
+| Following list | `{account}_following_export.json` | Detect mutual follows |
+| Scraped profiles (raw) | `{account}_apify_profiles_raw.json` | Raw Apify profile data |
+| Scraped profiles (CSV) | `{account}_profiles_export.csv` | Enriched profile spreadsheet |
+| Username list | `usernames.txt` | Plain text, one username per line |
+
+Replace `{account}` with the Instagram username you're analyzing (e.g. `chuckforqueens_followers_export.json`).
+
+### Tools overview
+- **Profile Scraper** — Scrape profile details (follower count, bio, verified status, etc.) for a list of usernames. Generates reports like noteworthy accounts, local collaborators, business accounts, and unfollower detection.
+- **Post Engagers** — Scrape who liked and commented on specific Instagram posts.
+- **Analyze Existing Data** — Re-run analysis reports on data you've already scraped or uploaded. No API calls, no token needed.
+""")
+
+st.markdown("---")
+
 # =============================================================================
 # Profile Scraper
 # =============================================================================
@@ -250,7 +292,7 @@ elif tool == "Post Engagers":
 # =============================================================================
 elif tool == "Analyze Existing Data":
     st.header("Analyze Existing Data")
-    st.caption("Run analysis on data already in the data/ directory (no API calls needed).")
+    st.caption("Run analysis on data already uploaded — no Apify token or API calls needed.")
 
     # Detect available targets from existing files
     existing_targets = set()
@@ -262,7 +304,13 @@ elif tool == "Analyze Existing Data":
     if existing_targets:
         target = st.selectbox("Target account", sorted(existing_targets))
     else:
-        target = st.text_input("Target account")
+        st.info(
+            "No data files found yet. Upload your files using the **Upload Data** "
+            "section in the sidebar, then come back here.\n\n"
+            "Make sure your files are named like `{account}_apify_profiles_raw.json` "
+            "or `{account}_profiles_export.csv`."
+        )
+        target = st.text_input("Or enter a target account name manually")
 
     col1, col2 = st.columns(2)
 
@@ -320,9 +368,35 @@ elif tool == "Analyze Existing Data":
 # --- Upload existing data ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("Upload Data")
-st.sidebar.caption("Upload existing JSON/CSV files to the data/ directory")
-data_upload = st.sidebar.file_uploader("Upload data file", type=["json", "csv", "txt"], key="data_upload")
-if data_upload:
-    dest = DATA_DIR / data_upload.name
-    dest.write_bytes(data_upload.read())
-    st.sidebar.success(f"Saved to {dest}")
+st.sidebar.markdown(
+    "Upload files to analyze. **File names matter!** Use the format:\n"
+    "- `{account}_followers_export.json`\n"
+    "- `{account}_apify_profiles_raw.json`\n"
+    "- `{account}_profiles_export.csv`\n"
+    "\n"
+    "Replace `{account}` with the IG username (e.g. `chuckforqueens`).\n"
+    "\n"
+    "See *Getting Started* above for the full list.",
+    help="Files are stored in memory for this session only. They are not saved permanently.",
+)
+data_uploads = st.sidebar.file_uploader(
+    "Upload data files",
+    type=["json", "csv", "txt"],
+    key="data_upload",
+    accept_multiple_files=True,
+)
+if data_uploads:
+    for data_upload in data_uploads:
+        dest = DATA_DIR / data_upload.name
+        dest.write_bytes(data_upload.read())
+        st.sidebar.success(f"Saved: {data_upload.name}")
+
+# Show what's currently in data/
+existing_files = sorted(DATA_DIR.glob("*"))
+existing_files = [f for f in existing_files if f.is_file()]
+if existing_files:
+    st.sidebar.markdown("---")
+    st.sidebar.caption(f"**Files loaded** ({len(existing_files)})")
+    for f in existing_files:
+        size_kb = f.stat().st_size / 1024
+        st.sidebar.caption(f"  {f.name} ({size_kb:.0f} KB)")
