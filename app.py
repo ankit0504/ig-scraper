@@ -163,7 +163,36 @@ if tool == "Profile Scraper":
         placeholder="The IG username you're analyzing, e.g. chuckforqueens",
     )
 
-    st.markdown("**Upload usernames to scrape**")
+    # --- Step 1: Upload existing data to avoid re-scraping ---
+    if target:
+        st.markdown("### Step 1: Upload existing data")
+        st.warning(
+            "**Before scraping, upload any data you already have** so we don't waste "
+            "API credits re-scraping accounts we've already processed. "
+            "If this is your first time, skip to Step 2."
+        )
+        st.markdown(
+            f"Rename your files to match these names exactly, then upload them:\n"
+            f"- **`{target}_apify_profiles_raw.json`** — raw Apify results from a previous scrape\n"
+            f"- **`{target}_profiles_export.csv`** — enriched profiles CSV\n"
+            f"- **`{target}_failed_enrichments.txt`** — usernames that previously failed\n"
+        )
+        existing_data_files = st.file_uploader(
+            "Upload previous scrape data (optional)",
+            type=["json", "csv", "txt"],
+            accept_multiple_files=True,
+            key="profile_existing_data",
+        )
+        if existing_data_files:
+            for f in existing_data_files:
+                save_upload(f)
+                f.seek(0)
+            st.success(f"Loaded {len(existing_data_files)} file(s): {', '.join(f.name for f in existing_data_files)}")
+
+        st.markdown("### Step 2: Upload usernames to scrape")
+    else:
+        st.markdown("**Upload usernames to scrape**")
+
     st.caption(
         "A **.txt** file with one username per line, or a **.json** followers export "
         "(list of objects with a `handle` or `username` field)."
@@ -315,20 +344,23 @@ elif tool == "Analyze Existing Data":
     )
 
     st.markdown("**Upload your data files**")
-    st.caption(
-        "Upload one or more files from a previous scrape. "
-        "File names matter — they must start with the target account name above."
-    )
 
-    with st.expander("What files can I upload?"):
-        st.markdown(f"""
-| What you have | Expected file name | Required? |
-|---|---|---|
-| Raw Apify scrape results | `{target or '{account}'}_apify_profiles_raw.json` | Yes (one of these two) |
-| Enriched profiles CSV | `{target or '{account}'}_profiles_export.csv` | Yes (one of these two) |
-| Followers list | `{target or '{account}'}_followers_export.json` | Optional — enables unfollower detection |
-| Following list | `{target or '{account}'}_following_export.json` | Optional — enables mutual follow detection |
-""")
+    if target:
+        st.info(
+            f"**Rename your files before uploading.** The tool matches files by name.\n\n"
+            f"| What you have | Rename it to |\n"
+            f"|---|---|\n"
+            f"| Raw Apify scrape results | `{target}_apify_profiles_raw.json` |\n"
+            f"| Enriched profiles CSV | `{target}_profiles_export.csv` |\n"
+            f"| Followers list | `{target}_followers_export.json` (optional — enables unfollower detection) |\n"
+            f"| Following list | `{target}_following_export.json` (optional — enables mutual follow detection) |\n"
+            f"\n"
+            f"You need at least one of the first two files."
+        )
+    else:
+        st.info(
+            "Enter the target account name above first — the expected file names depend on it."
+        )
 
     uploaded_files = st.file_uploader(
         "Data files",
